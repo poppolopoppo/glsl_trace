@@ -8,6 +8,7 @@
 
 using namespace glslang;
 using VariableID = ShaderTrace::VariableID;
+using SymbolID = ShaderTrace::SymbolID;
 
 namespace
 {
@@ -22,15 +23,15 @@ namespace
 
 	private:
 		CachedSymbols_t			_cachedSymbols;
-		
-		int						_maxSymbolId				= 0;
+
+		SymbolID				_maxSymbolId				= 0;
 		bool					_startedUserDefinedSymbols	= false;
-		
+
 		TIntermSymbol *			_dbgStorage					= nullptr;
 
 		const string			_entryName;
 		const EShLanguage		_shLang;
-		
+
 		const bool				_hasNVRayTracingExt			= false;	// switch between VN and KHR extensions
 
 
@@ -44,7 +45,7 @@ namespace
 		ND_ string const&	GetEntryPoint ()			const	{ return _entryName; }
 
 		void			AddSymbol (TIntermSymbol* node, bool isUserDefined);
-		ND_ int			GetUniqueSymbolID ();
+		ND_ SymbolID	GetUniqueSymbolID ();
 
 		void CacheSymbolNode (TIntermSymbol* node, bool isUserDefined)
 		{
@@ -61,7 +62,7 @@ namespace
 		ND_ TIntermSymbol*	GetDebugStorage ()						const	{ CHECK( _dbgStorage );  return _dbgStorage; }
 			bool			SetDebugStorage (TIntermSymbol* symb);
 		ND_ TIntermBinary*  GetDebugStorageField (const char* name)	const;
-		
+
 		ND_ EShLanguage		GetShaderType ()						const	{ return _shLang; }
 		ND_ uint			IsNVRT ()								const	{ return uint(_hasNVRayTracingExt); }
 	};
@@ -84,7 +85,7 @@ void  DebugInfo::AddSymbol (TIntermSymbol* node, bool isUserDefined)
 	GetUniqueSymbolID
 =================================================
 */
-int  DebugInfo::GetUniqueSymbolID ()
+SymbolID  DebugInfo::GetUniqueSymbolID ()
 {
 	_startedUserDefinedSymbols = true;
 	return ++_maxSymbolId;
@@ -114,7 +115,7 @@ bool  DebugInfo::SetDebugStorage (TIntermSymbol* symb)
 TIntermBinary*  DebugInfo::GetDebugStorageField (const char* name) const
 {
 	CHECK_ERR( _dbgStorage );
-		
+
 	TPublicType		index_type;		index_type.init({});
 	index_type.basicType			= TBasicType::EbtInt;
 	index_type.qualifier.storage	= TStorageQualifier::EvqConst;
@@ -143,7 +144,7 @@ static bool  RecursiveProcessNode (TIntermNode* node, DebugInfo &dbgInfo);
 static bool  RecursiveProcessAggregateNode (TIntermAggregate* aggr, DebugInfo &dbgInfo);
 static bool  ProcessSymbolNode (TIntermSymbol* node, DebugInfo &dbgInfo);
 
-	
+
 /*
 =================================================
 	RecursiveProcessAggregateNode
@@ -174,7 +175,7 @@ static bool  RecursiveProcessNode (TIntermNode* node, DebugInfo &dbgInfo)
 		CHECK_ERR( RecursiveProcessAggregateNode( aggr, dbgInfo ));
 		return true;
 	}
-	
+
 	if ( auto* unary = node->getAsUnaryNode() )
 	{
 		CHECK_ERR( RecursiveProcessNode( unary->getOperand(), dbgInfo ));
@@ -224,7 +225,7 @@ static bool  RecursiveProcessNode (TIntermNode* node, DebugInfo &dbgInfo)
 		CHECK_ERR( ProcessSymbolNode( symbol, dbgInfo ));
 		return true;
 	}
-	
+
 	if ( auto* typed = node->getAsTyped() )
 	{
 		return true;
@@ -240,7 +241,7 @@ static bool  RecursiveProcessNode (TIntermNode* node, DebugInfo &dbgInfo)
 
 	return false;
 }
-	
+
 /*
 =================================================
 	ProcessSymbolNode
@@ -275,7 +276,7 @@ static void  CreateShaderDebugStorage (uint descSetIndex, DebugInfo &dbgInfo, OU
 	//      readonly ivec2  dimension;
 	//               uvec2  outPixels[];
 	//  } dbg_ShaderTrace
-	
+
 	TPublicType		type;		type.init({});
 	type.basicType				= TBasicType::EbtFloat;
 	type.vectorSize				= 2;
@@ -284,18 +285,18 @@ static void  CreateShaderDebugStorage (uint descSetIndex, DebugInfo &dbgInfo, OU
 	type.qualifier.layoutPacking= TLayoutPacking::ElpStd430;
 	type.qualifier.precision	= TPrecisionQualifier::EpqHigh;
 	type.qualifier.layoutOffset	= 0;
-		
+
 #ifdef USE_STORAGE_QUALIFIERS
 	type.qualifier.readonly		= true;
 #endif
-	
+
 	TType*			scale		= new TType{type};		scale->setFieldName( "scale" );
-	
+
 	type.basicType				= TBasicType::EbtInt;
 	type.qualifier.layoutOffset += 8;
 
 	TType*			dimension	= new TType{type};		dimension->setFieldName( "dimension" );
-	
+
 	type.basicType				= TBasicType::EbtUint;
 	type.arraySizes				= new TArraySizes{};
 	type.arraySizes->addInnerSize();
@@ -323,7 +324,7 @@ static void  CreateShaderDebugStorage (uint descSetIndex, DebugInfo &dbgInfo, OU
 	TIntermSymbol*	storage_buf	= new TIntermSymbol{ 0x10000001, "dbg_ShaderTrace", TType{type_list, "dbg_ShaderTraceStorage", block_qual} };
 
 	pixelsOffset = pixels->getQualifier().layoutOffset;
-	
+
 	dbgInfo.SetDebugStorage( storage_buf );
 }
 
@@ -349,7 +350,7 @@ static void  CreateShaderBuiltinSymbols (TIntermNode*, DebugInfo &dbgInfo)
 		vec4_type.vectorSize		= 4;
 		vec4_type.qualifier.storage	= TStorageQualifier::EvqFragCoord;
 		vec4_type.qualifier.builtIn	= TBuiltInVariable::EbvFragCoord;
-		
+
 		TIntermSymbol*	symb = new TIntermSymbol{ dbgInfo.GetUniqueSymbolID(), "gl_FragCoord", TType{vec4_type} };
 		symb->setLoc( loc );
 		dbgInfo.CacheSymbolNode( symb, true );
@@ -394,7 +395,7 @@ ND_ static TIntermBinary*  GetFragmentCoord (TIntermSymbol* coord, DebugInfo &db
 	type.vectorSize				= 1;
 	type.qualifier.precision	= TPrecisionQualifier::EpqHigh;
 	type.qualifier.storage		= TStorageQualifier::EvqConst;
-	
+
 	// "gl_FragCoord.xy"
 	TConstUnionArray		x_index(1);		x_index[0].setIConst( 0 );
 	TIntermConstantUnion*	x_field			= new TIntermConstantUnion{ x_index, TType{type} };
@@ -411,7 +412,7 @@ ND_ static TIntermBinary*  GetFragmentCoord (TIntermSymbol* coord, DebugInfo &db
 	fragcoord_xy->setType( TType{type} );
 	fragcoord_xy->setLeft( fragcoord );
 	fragcoord_xy->setRight( xy_field );
-				
+
 	// "... gl_FragCoord.xy * dbg_ShaderTrace.scale"
 	TIntermBinary*		frag_mul_scale	= new TIntermBinary{ TOperator::EOpMul };
 	TIntermBinary*		scale			= dbgInfo.GetDebugStorageField( "scale" );
@@ -425,7 +426,7 @@ ND_ static TIntermBinary*  GetFragmentCoord (TIntermSymbol* coord, DebugInfo &db
 	type.basicType		= TBasicType::EbtInt;
 	to_ivec2->setType( TType{type} );
 	to_ivec2->setOperand( frag_mul_scale );
-	
+
 	// "ivec2(0)"
 	type.qualifier.storage	= TStorageQualifier::EvqConst;
 	type.vectorSize			= 1;
@@ -468,7 +469,7 @@ ND_ static TIntermBinary*  GetFragmentCoord (TIntermSymbol* coord, DebugInfo &db
 	clamp_op->getSequence().push_back( to_ivec2 );
 	clamp_op->getSequence().push_back( zero_ivec );
 	clamp_op->getSequence().push_back( dim_sub_one );
-	
+
 	// "ivec2  dbg_Coord = clamp( ivec2(gl_FragCoord.xy * dbg_ShaderTrace.scale), ivec2(0), dimension - ivec2(1) )"
 	TIntermBinary*		assign_coord	= new TIntermBinary{ TOperator::EOpAssign };
 	type.qualifier.storage = TStorageQualifier::EvqTemporary;
@@ -497,7 +498,7 @@ ND_ static TIntermBinary*  GetComputeCoord (TIntermSymbol* coord, DebugInfo &dbg
 	TIntermUnary*		to_vec2		= new TIntermUnary{ TOperator::EOpConvUintToFloat };
 	to_vec2->setType( TType{type} );
 	to_vec2->setOperand( workgroup );
-				
+
 	// "... vec2(gl_GlobalInvocationID) * dbg_ShaderTrace.scale ..."
 	TIntermBinary*		work_mul_scale	= new TIntermBinary{ TOperator::EOpMul };
 	TIntermBinary*		scale			= dbgInfo.GetDebugStorageField( "scale" );
@@ -505,13 +506,13 @@ ND_ static TIntermBinary*  GetComputeCoord (TIntermSymbol* coord, DebugInfo &dbg
 	work_mul_scale->setType( TType{type} );
 	work_mul_scale->setLeft( to_vec2 );
 	work_mul_scale->setRight( scale );
-	
+
 	// "... ivec2(vec2(gl_GlobalInvocationID) * dbg_ShaderTrace.scale) ..."
 	TIntermUnary*		to_ivec2	= new TIntermUnary{ TOperator::EOpConvFloatToInt };
 	type.basicType		= TBasicType::EbtInt;
 	to_ivec2->setType( TType{type} );
 	to_ivec2->setOperand( work_mul_scale );
-	
+
 	// "ivec2(0)"
 	type.qualifier.storage	= TStorageQualifier::EvqConst;
 	type.vectorSize			= 1;
@@ -554,7 +555,7 @@ ND_ static TIntermBinary*  GetComputeCoord (TIntermSymbol* coord, DebugInfo &dbg
 	clamp_op->getSequence().push_back( to_ivec2 );
 	clamp_op->getSequence().push_back( zero_ivec );
 	clamp_op->getSequence().push_back( dim_sub_one );
-	
+
 	// "ivec2  dbg_Coord = clamp( ivec2(vec2(gl_GlobalInvocationID) * dbg_ShaderTrace.scale), ivec2(0), dimension - ivec2(1) )"
 	TIntermBinary*		assign_coord	= new TIntermBinary{ TOperator::EOpAssign };
 	type.qualifier.storage = TStorageQualifier::EvqTemporary;
@@ -583,7 +584,7 @@ ND_ static TIntermBinary*  GetRayTracingCoord (TIntermSymbol* coord, DebugInfo &
 	TIntermUnary*		to_vec2		= new TIntermUnary{ TOperator::EOpConvUintToFloat };
 	to_vec2->setType( TType{type} );
 	to_vec2->setOperand( launch_id );
-				
+
 	// "... ivec2(vec2(gl_LaunchID) * dbg_ShaderTrace.scale) ..."
 	TIntermBinary*		launch_mul_scale	= new TIntermBinary{ TOperator::EOpMul };
 	TIntermBinary*		scale				= dbgInfo.GetDebugStorageField( "scale" );
@@ -591,13 +592,13 @@ ND_ static TIntermBinary*  GetRayTracingCoord (TIntermSymbol* coord, DebugInfo &
 	launch_mul_scale->setType( TType{type} );
 	launch_mul_scale->setLeft( to_vec2 );
 	launch_mul_scale->setRight( scale );
-	
+
 	// "... ivec2(vec2(gl_LaunchID) * dbg_ShaderTrace.scale) ..."
 	TIntermUnary*		to_ivec2	= new TIntermUnary{ TOperator::EOpConvFloatToInt };
 	type.basicType		= TBasicType::EbtInt;
 	to_ivec2->setType( TType{type} );
 	to_ivec2->setOperand( launch_mul_scale );
-	
+
 	// "ivec2(0)"
 	type.qualifier.storage	= TStorageQualifier::EvqConst;
 	type.vectorSize			= 1;
@@ -640,7 +641,7 @@ ND_ static TIntermBinary*  GetRayTracingCoord (TIntermSymbol* coord, DebugInfo &
 	clamp_op->getSequence().push_back( to_ivec2 );
 	clamp_op->getSequence().push_back( zero_ivec );
 	clamp_op->getSequence().push_back( dim_sub_one );
-	
+
 	// "ivec2  dbg_Coord = clamp( ivec2(vec2(gl_LaunchID) * dbg_ShaderTrace.scale), ivec2(0), dimension - ivec2(1) )"
 	TIntermBinary*		assign_coord	= new TIntermBinary{ TOperator::EOpAssign };
 	type.qualifier.storage = TStorageQualifier::EvqTemporary;
@@ -665,11 +666,11 @@ static bool  InsertShaderTimeMeasurementToEntry (TIntermAggregate* entry, DebugI
 	type.vectorSize				= 2;
 	type.qualifier.storage		= TStorageQualifier::EvqTemporary;
 	type.qualifier.precision	= TPrecisionQualifier::EpqHigh;
-			
+
 	TPublicType		index_type;	 index_type.init({});
 	index_type.basicType		 = TBasicType::EbtInt;
 	index_type.qualifier.storage = TStorageQualifier::EvqConst;
-	
+
 	// "ivec2  dbg_Coord = ..."
 	TIntermSymbol*	coord		= new TIntermSymbol{ dbgInfo.GetUniqueSymbolID(), "dbg_Coord", TType{type} };
 	TIntermBinary*	assign_coord = nullptr;
@@ -690,7 +691,7 @@ static bool  InsertShaderTimeMeasurementToEntry (TIntermAggregate* entry, DebugI
 			case EShLanguage::EShLangCompute :
 				assign_coord = GetComputeCoord( coord, dbgInfo );
 				break;
-			
+
 			case EShLanguage::EShLangRayGen :
 			case EShLanguage::EShLangIntersect :
 			case EShLanguage::EShLangAnyHit :
@@ -717,10 +718,10 @@ static bool  InsertShaderTimeMeasurementToEntry (TIntermAggregate* entry, DebugI
 		type.basicType			= TBasicType::EbtUint;
 		type.vectorSize			= 2;
 		type.qualifier.storage	= TStorageQualifier::EvqTemporary;
-				
+
 		TIntermAggregate*	time_call	= new TIntermAggregate( TOperator::EOpReadClockDeviceKHR );
 		time_call->setType( TType{type} );
-				
+
 		start_time = new TIntermSymbol{ dbgInfo.GetUniqueSymbolID(), "dbg_StartTime", TType{type} };
 
 		TIntermBinary*		assign_time	= new TIntermBinary{ TOperator::EOpAssign };
@@ -745,14 +746,14 @@ static bool  InsertShaderTimeMeasurementToEntry (TIntermAggregate* entry, DebugI
 		time_delta->setType( TType{type} );
 		time_delta->setLeft( time_call );
 		time_delta->setRight( start_time );
-				
+
 		// "uvec2  dbg_Diff = clockRealtime2x32EXT() - dbg_StartTime"
 		TIntermSymbol*		diff		= new TIntermSymbol{ dbgInfo.GetUniqueSymbolID(), "dbg_Diff", TType{type} };
 		TIntermBinary*		assign_diff	= new TIntermBinary{ TOperator::EOpAssign };
 		assign_diff->setType( TType{type} );
 		assign_diff->setLeft( diff );
 		assign_diff->setRight( time_delta );
-				
+
 		// "dbg_Coord.x"
 		TConstUnionArray		x_index(1);	x_index[0].setIConst( 0 );
 		TIntermConstantUnion*	x_field		= new TIntermConstantUnion{ x_index, TType{index_type} };
@@ -769,7 +770,7 @@ static bool  InsertShaderTimeMeasurementToEntry (TIntermAggregate* entry, DebugI
 		coord_y->setType( TType{type} );
 		coord_y->setLeft( coord );
 		coord_y->setRight( y_field );
-		
+
 		// "dbg_ShaderTrace.dimension.x"
 		TIntermBinary*		dimension	= dbgInfo.GetDebugStorageField( "dimension" );
 		TIntermBinary*		dimension_x	= new TIntermBinary{ TOperator::EOpIndexDirect };
@@ -783,7 +784,7 @@ static bool  InsertShaderTimeMeasurementToEntry (TIntermAggregate* entry, DebugI
 		cy_mul_width->setType( TType{type} );
 		cy_mul_width->setLeft( coord_y );
 		cy_mul_width->setRight( dimension_x );
-				
+
 		// "... dbg_Coord.x + dbg_Coord.y * dbg_ShaderTrace.dimension.x"
 		TIntermBinary*		calc_index	= new TIntermBinary{ TOperator::EOpAdd };
 		calc_index->setType( TType{type} );
@@ -797,7 +798,7 @@ static bool  InsertShaderTimeMeasurementToEntry (TIntermAggregate* entry, DebugI
 		assign_index->setType( TType{type} );
 		assign_index->setLeft( index );
 		assign_index->setRight( calc_index );
-				
+
 		// "dbg_ShaderTrace.outPixels[dbg_Index]"
 		TIntermBinary*		out_pixel		= dbgInfo.GetDebugStorageField( "outPixels" );
 		TIntermBinary*		curr_pixel		= new TIntermBinary{ TOperator::EOpIndexIndirect };
@@ -808,7 +809,7 @@ static bool  InsertShaderTimeMeasurementToEntry (TIntermAggregate* entry, DebugI
 		curr_pixel->getWritableType().setFieldName( "outPixels" );
 		curr_pixel->setLeft( out_pixel );
 		curr_pixel->setRight( index );
-				
+
 		// "dbg_ShaderTrace.outPixels[dbg_Index].x"
 		TIntermBinary*		out_pixel_x		= new TIntermBinary{ TOperator::EOpIndexDirect };
 		type.vectorSize	= 1;
@@ -861,7 +862,7 @@ static bool  InsertShaderTimeMeasurementToEntry (TIntermAggregate* entry, DebugI
 		TIntermConstantUnion*	one_val			= new TIntermConstantUnion{ y_index, TType{type} };
 		TIntermSelection*		add_one_or_zero	= new TIntermSelection{ less_then_oldval, one_val, zero_val };
 		add_one_or_zero->setType( TType{type} );
-				
+
 		// "dbg_Diff.y"
 		TIntermBinary*		diff_y			= new TIntermBinary{ TOperator::EOpIndexDirect };
 		type.qualifier.storage = TStorageQualifier::EvqTemporary;
@@ -890,7 +891,7 @@ static bool  InsertShaderTimeMeasurementToEntry (TIntermAggregate* entry, DebugI
 		atomic_add_y->getQualifierList().push_back( TStorageQualifier::EvqIn );
 		atomic_add_y->getSequence().push_back( out_pixel_y );
 		atomic_add_y->getSequence().push_back( diffy_add_sel );
-				
+
 		TIntermAggregate*	sequence	= new TIntermAggregate( TOperator::EOpSequence );
 		sequence->getSequence().push_back( assign_diff );
 		sequence->getSequence().push_back( assign_coord );
@@ -915,7 +916,7 @@ static bool  InsertShaderTimeMeasurement (TIntermNode* root, DebugInfo &dbgInfo)
 
 	// find shader resources entry
 	TIntermAggregate*	linker_objs	= nullptr;
-	
+
 	for (auto& entry : aggr->getSequence())
 	{
 		if ( auto*  aggr2 = entry->getAsAggregate() )
@@ -927,14 +928,14 @@ static bool  InsertShaderTimeMeasurement (TIntermNode* root, DebugInfo &dbgInfo)
 			}
 		}
 	}
-	
+
 	if ( not linker_objs ) {
 		linker_objs = new TIntermAggregate{ TOperator::EOpLinkerObjects };
 		aggr->getSequence().push_back( linker_objs );
 	}
 
 	linker_objs->getSequence().insert( linker_objs->getSequence().begin(), dbgInfo.GetDebugStorage() );
-	
+
 
 	// find entry function
 	for (auto& entry : aggr->getSequence())
@@ -942,13 +943,13 @@ static bool  InsertShaderTimeMeasurement (TIntermNode* root, DebugInfo &dbgInfo)
 		auto*	aggr2 = entry->getAsAggregate();
 		if ( not (aggr2 and aggr2->getOp() == TOperator::EOpFunction) )
 			continue;
-			
+
 		if ( aggr2->getName().c_str() == dbgInfo.GetEntryPoint()	and
 			 aggr2->getSequence().size() >= 2 )
 		{
 			auto*	body = aggr2->getSequence()[1]->getAsAggregate();
 			CHECK_ERR( body );
-			
+
 			CHECK_ERR( InsertShaderTimeMeasurementToEntry( body, dbgInfo ));
 			return true;
 		}
@@ -974,16 +975,16 @@ bool  ShaderTrace::InsertShaderClockHeatmap (glslang::TIntermediate &intermediat
 
 	TIntermNode*	root = intermediate.getTreeRoot();
 	CHECK_ERR( root );
-	
+
 	_posOffset = ~0ull;
 	CreateShaderDebugStorage( descSetIndex, dbg_info, OUT _dataOffset );
-	
+
 	CHECK_ERR( RecursiveProcessNode( root, dbg_info ));
 
 	CreateShaderBuiltinSymbols( root, dbg_info );
 
 	InsertShaderTimeMeasurement( root, dbg_info );
-	
+
 	ValidateInterm( intermediate );
 	return true;
 }

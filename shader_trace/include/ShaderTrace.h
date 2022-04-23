@@ -20,6 +20,8 @@ struct ShaderTrace
 public:
 	enum class VariableID : uint32_t { Unknown = ~0u };
 
+	using SymbolID = long long;
+
 	struct SourcePoint
 	{
 		uint64_t	value;
